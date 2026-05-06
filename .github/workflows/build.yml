@@ -16,6 +16,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Show file structure
+        run: find . -name "settings.gradle" -o -name "build.gradle" | head -20
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -24,14 +27,12 @@ jobs:
 
       - name: Install Android SDK
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y wget unzip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdtools.zip
           unzip -q cmdtools.zip -d $HOME/android-sdk
           mkdir -p $HOME/android-sdk/cmdline-tools/latest
           mv $HOME/android-sdk/cmdline-tools/* $HOME/android-sdk/cmdline-tools/latest/ 2>/dev/null || true
           export ANDROID_HOME=$HOME/android-sdk
-          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
+          export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
           yes | sdkmanager --licenses > /dev/null 2>&1
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
           echo "ANDROID_HOME=$HOME/android-sdk" >> $GITHUB_ENV
@@ -42,16 +43,23 @@ jobs:
         run: |
           wget -q https://services.gradle.org/distributions/gradle-8.0-bin.zip -O gradle.zip
           unzip -q gradle.zip -d $HOME/gradle-install
-          export GRADLE_BIN=$HOME/gradle-install/gradle-8.0/bin/gradle
+          GRADLE_BIN=$HOME/gradle-install/gradle-8.0/bin/gradle
           chmod +x $GRADLE_BIN
+          # Find where settings.gradle lives and run wrapper from there
+          PROJECT_DIR=$(dirname $(find . -name "settings.gradle" | head -1))
+          echo "Project dir: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
+          cd $PROJECT_DIR
           $GRADLE_BIN wrapper --gradle-version 8.0
           chmod +x gradlew
 
       - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: |
+          cd $PROJECT_DIR
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: OnboardingApp-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: "**/app/build/outputs/apk/debug/app-debug.apk"
